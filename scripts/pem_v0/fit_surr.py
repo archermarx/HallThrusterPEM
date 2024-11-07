@@ -72,8 +72,8 @@ def train_mf(max_runtime_hr=8):
             hf_model_cost = hf_alloc[1] / hf_alloc[0]
             mf_test = mf_sys.build_metrics['test_stats']    # (Niter+1, 2, Nqoi)
             mf_alloc, mf_offline, mf_cum = mf_sys.get_allocation()
-            #hf_alloc = mf_alloc['Thruster']['(0, 0)']
-            #hf_model_cost = hf_alloc[1] / hf_alloc[0]
+            # hf_alloc = mf_alloc['Thruster']['(0, 0)']
+            # hf_model_cost = hf_alloc[1] / hf_alloc[0]
 
             # Plot QoI L2 error on test set vs. cost
             qoi_ind = sf_sys._get_qoi_ind(qoi_ind)

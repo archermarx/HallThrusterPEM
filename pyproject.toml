@@ -21,6 +21,7 @@ dependencies = [
     "h5py>=3.12.1",
     "uqtils>=0.3.1",
     "mpi4py>=4.0.1",
+    "amisc==0.4.0",
 ]
 requires-python = ">=3.11"
 readme = "docs/README.md"
@@ -78,5 +79,4 @@ dev = [
     "mkdocs-material>=9.5.2",
     "mkdocstrings[python]>=0.24.0",
     "GitPython>=3.1.40",
-    "-e file:///${PROJECT_ROOT}/../amisc#egg=amisc",
 ]
