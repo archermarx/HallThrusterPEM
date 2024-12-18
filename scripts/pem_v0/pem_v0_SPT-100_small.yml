@@ -97,11 +97,11 @@ components: !Component
       grid:
         type: EvenGrid
         num_cells: 100   # overwritten by model_fidelity[0]
-      duration: 0.002   # s
+      duration: 0.001   # s
       num_save: 1000
       verbose: false
     postprocess:
-      average_start_time: 0.001  # s
+      average_start_time: 0.0005  # s
     model_fidelity: (2, 2)
     data_fidelity: (2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
     inputs: !Variable

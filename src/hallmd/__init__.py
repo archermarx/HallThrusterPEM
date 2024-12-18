@@ -4,4 +4,4 @@ import numpy as _np
 __version__ = '0.2.0'
 
 # Custom types that are used frequently
-ExpData = dict[str: _np.ndarray]
+type ExpData = dict[str,_np.ndarray]

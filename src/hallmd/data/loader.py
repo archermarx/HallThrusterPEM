@@ -30,9 +30,10 @@ Includes
     ```
 """
 from hallmd import ExpData
+from typing import Optional
 
 
-def spt100_data(qois: list[str] = None) -> dict[str: list[ExpData]]:
+def spt100_data(qois: Optional[list[str]] = None) -> dict[str, list[ExpData]]:
     """Return a dict with experimental data for each specified quantity for the SPT-100.
 
     :param qois: a list specifying the experimental data to return, must be in `['V_cc', 'T', 'uion', 'jion']`
