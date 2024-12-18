@@ -228,7 +228,7 @@ if __name__ == "__main__":
         case _:
             raise ValueError(f"Unsupported executor type: {args.executor}")
 
-    logpdf = lambda params: log_likelihood(
+    logpdf = lambda params: log_posterior(
         system, data, executor, base, params_to_calibrate, params
     )
 
