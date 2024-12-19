@@ -7,12 +7,15 @@ import numpy as np
 from typing import Optional, Callable
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import ash
 
 import MCMCIterators.samplers as samplers
 
 import hallmd
 from hallmd.data.loader import spt100_data
 from amisc import YamlLoader, System
+
+import plotting
 
 parser = argparse.ArgumentParser(
     description="Generate compression (SVD) data and test set data for training a surrogate."
@@ -53,23 +56,13 @@ def get_nominal_inputs(system: System) -> dict[str, float]:
     return inputs
 
 
-def log_prior(
-    system: System, params_to_calibrate: list[str], params: np.ndarray
-) -> float:
-    logp = 0.0
-    for key, value in zip(params_to_calibrate, params):
-        logp += np.log(system.inputs()[key].distribution.pdf(value))[0]
-
-    return logp
-
-
 type DataSet = dict[str, list[hallmd.ExpData]]
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 
 def plot_spt100_ui(
-    spt100_data: DataSet, output: Optional[dict], casename: str
+    spt100_data: DataSet, output: Optional[dict], file: str | Path
 ) -> tuple[Figure, Axes]:
 
     data = spt100_data["uion"][0]
@@ -102,8 +95,26 @@ def plot_spt100_ui(
 
     plt.legend()
     plt.tight_layout()
-    fig.savefig(casename + ".png", dpi=200)
+    fig.savefig(file, dpi=300)
     return fig, ax
+
+
+def plot_all(data, outputs, params_to_calibrate, samples, logps, best_sample, outpath):
+    outputs = _run_model(system, executor, base, params_to_calibrate, best_sample)
+
+    # Plot ion velocity comparison of best sample
+    plot_spt100_ui(data, outputs, outpath / f"map_{i}.png")
+
+    # Plot MCMC traces
+    plotting.plot_traces(np.array(samples), params_to_calibrate, outpath / "traces.png")
+
+    # Corner plot
+    plotting.plot_corner(
+        np.array(samples),
+        params_to_calibrate,
+        outpath / "corner.png",
+        np.array(logps),
+    )
 
 
 def _calc_log_likelihood(data, output):
@@ -113,7 +124,7 @@ def _calc_log_likelihood(data, output):
 
     # Assume Gaussian likelihood at each datapoint
     #
-    # f(u) = 1/sqrt(2 * pi )/s * exp(-(u - u_data)^2 / (2 * s^2))
+    # f(u) = 1/sqrt(2 * pi s^2) * exp(-(u - u_data)^2 / (2 * s^2))
     #
     # log(f(u)) = -0.5 log(2 pi s^2) - 0.5 * ((u-u_data)/s)^2
 
@@ -139,7 +150,6 @@ def _run_model(
     # Construct input dictionary
     sample_dict = base_params.copy()
     for key, val in zip(params_to_calibrate, params):
-        # sample_dict[key] = system.inputs()[key].normalize(val)
         # Work directly with normalized values
         sample_dict[key] = val
 
@@ -170,6 +180,21 @@ def log_likelihood(
     return _calc_log_likelihood(data, outputs)
 
 
+def log_prior(
+    system: System, params_to_calibrate: list[str], params: np.ndarray
+) -> float:
+    logp = 0.0
+    for key, value in zip(params_to_calibrate, params):
+        var = system.inputs()[key]
+        prior = var.distribution.pdf(var.denormalize(value))[0]
+        if prior <= 0:
+            return -np.inf
+
+        logp += np.log(prior)
+
+    return logp
+
+
 def log_posterior(
     system: System,
     data: dict[str, list[hallmd.ExpData]],
@@ -181,12 +206,14 @@ def log_posterior(
 
     prior = log_prior(system, params_to_calibrate, params)
     if not np.isfinite(prior):
+        print("non finite prior, returning")
         return -np.inf
 
     likelihood = log_likelihood(
         system, data, executor, base_params, params_to_calibrate, params
     )
     if not np.isfinite(likelihood):
+        print("non finite likelihood, returning")
         return -np.inf
 
     return prior + likelihood
@@ -246,15 +273,25 @@ if __name__ == "__main__":
         level_scale=1e-1,
     )
 
-    samples: list[np.ndarray] = []
-    logps: list[float] = []
-    max_logp: float = -np.inf
-    best_sample: np.ndarray = init_sample
-    accepted: int = 0
-    max_samples: int = 1_000
+    outpath = Path(system.root_dir)
 
     outputs = _run_model(system, executor, base, params_to_calibrate, init_sample)
-    plot_spt100_ui(data, outputs, "init")
+    init_logp = _calc_log_likelihood(data, outputs) + log_prior(
+        system, params_to_calibrate, init_sample
+    )
+    plot_spt100_ui(data, outputs, outpath / "init.png")
+    print(f"Initial sample: {init_sample}\nInitial log posterior: {init_logp}")
+
+    delimiter = ","
+    header = delimiter.join(params_to_calibrate + ["log_posterior"] + ["accepted"])
+
+    samples: list[np.ndarray] = [init_sample]
+    logps: list[float] = [init_logp]
+    max_logp: float = init_logp
+    best_sample: np.ndarray = init_sample
+    accepted_samples: list[bool] = [True]
+    accepted: int = 0
+    max_samples: int = 1_000
 
     for i, (sample, logp, accepted_bool) in enumerate(sampler):
         if i >= max_samples:
@@ -264,23 +301,36 @@ if __name__ == "__main__":
         print(f"\t Logpdf: {logp}")
         print(f"\t Accepted? -> {accepted_bool}")
 
+        samples.append(sample)
+        logps.append(logp)
+        accepted_samples.append(accepted_bool)
+        accepted += accepted_bool
+
         if accepted_bool:
             if logp > max_logp:
                 best_sample = sample
                 max_logp = logp
-            samples.append(sample)
-            logps.append(logp)
-            accepted += accepted_bool
 
         print(f"\t Best sample: {best_sample}")
-        print(f"\t Acceptance ratio: {accepted / (i+1)} ({accepted}/{i+1})")
+        print(f"\t Best log-posterior: {max_logp}")
+        p_accept = accepted / len(samples)
+        print(f"\t Acceptance ratio: {p_accept} ({accepted}/{len(samples)})")
 
-        if i % 50 == 0:
-            outputs = _run_model(
-                system, executor, base, params_to_calibrate, best_sample
+        # save samples to file
+        np.savetxt(
+            outpath / "samples.txt",
+            np.hstack(
+                (
+                    np.array(samples),
+                    np.array(logps)[..., None],
+                    np.array(accepted_samples)[..., None],
+                )
+            ),
+            header=f"p_accept = {p_accept}\n" + header,
+            delimiter=delimiter,
+        )
+
+        if i % 50 == 0 or i == max_samples - 1:
+            plot_all(
+                data, outputs, params_to_calibrate, samples, logps, best_sample, outpath
             )
-            plot_spt100_ui(data, outputs, f"map_{i}")
-
-    # predictions from best sample
-    outputs = _run_model(system, executor, base, params_to_calibrate, best_sample)
-    plot_spt100_ui(data, outputs, "best")

@@ -137,7 +137,7 @@ components: !Component
         category: calibration
         tex: "$a_1$"
         nominal: 0.00680237
-        distribution: LogUniform(0.00316, 0.1)
+        distribution: Uniform(0.0001, 1.0)
         norm: log10
       - name: a_2
         description: Anomalous transport scale outside channel
