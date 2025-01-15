@@ -61,13 +61,13 @@ components: !Component
         domain: (0, 60)
   - name: Thruster
     model: !!python/name:hallmd.models.thruster.hallthruster_jl
-    version: 0.18.0
+    version: 0.18.1
     thruster: SPT-100
     config:
 #      thruster: SPT-100                 # moved to separate thruster kwarg
       discharge_voltage: 300             # overwritten by V_a
       anode_mass_flow_rate: 5.0e-6       # overwritten by mdot_a
-      cathode_coupling_voltage: 30              # overwritten by V_cc
+      cathode_coupling_voltage: 30       # overwritten by V_cc
       background_pressure_Torr: 1.0e-5   # overwritten by P_b
       cathode_Tev: 3                     # overwritten by T_e
       neutral_velocity: 300              # overwritten by u_n
@@ -76,9 +76,11 @@ components: !Component
       anom_model:
         type: LogisticPressureShift
         model:
-          type: TwoZoneBohm
-          c1: 0.00625  # overwritten by a_1
-          c2: 0.0625   # overwritten by a_2 * a_1
+          type: GaussianBohm
+          hall_min: 0.00625  # overwritten by anom_min
+          hall_max: 0.0625   # overwritten by anom_max * anom_min
+          center: 0.025      # overwritten by anom_center
+          width: 0.005       # overwritten by anom_width
         dz: 0.2        # overwritten by dz
         z0: -0.03   # overwritten by z0
         pstar: 45.0e-6 # overwritten by p0
@@ -103,7 +105,7 @@ components: !Component
     postprocess:
       average_start_time: 0.0005  # s
     model_fidelity: (2, 2)
-    data_fidelity: (2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
+    data_fidelity: (2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
     inputs: !Variable
       - name: P_b
       - name: V_a
@@ -132,19 +134,33 @@ components: !Component
         nominal: 1.87915e-3
         distribution: U(1.0e-3, 20.0e-3)
         norm: linear(1e3)
-      - name: a_1
-        description: Anomalous transport scale inside channel
+      - name: anom_min
+        description: minimum Hall parameter 
         category: calibration
-        tex: "$a_1$"
+        tex: "$\\alpha_1$"
         nominal: 0.00680237
         distribution: Uniform(0.0001, 1.0)
         norm: log10
-      - name: a_2
-        description: Anomalous transport scale outside channel
+      - name: anom_max
+        description: maximum Hall parameter 
         category: calibration
-        tex: "$a_2$"
+        tex: "$\\alpha_2$"
         nominal: 14.645
         distribution: Uniform(2, 100)
+      - name: anom_center
+        description: location of gaussian trough in anom profile
+        category: calibration
+        tex: "$z_{anom}$"
+        nominal: 0.025
+        distribution: Uniform(0.01, 0.035)
+        norm: log10
+      - name: anom_width
+        description: width of gaussian trough in anom profile
+        category: calibration
+        tex: $L_{anom}$
+        nominal: 0.005
+        distribution: Uniform(0.001, 0.01)
+        norm: log10
       - name: dz
         description: Anomalous shift displacement
         category: calibration

@@ -1,25 +1,23 @@
-import ash
-import numpy as np
 from pathlib import Path
 from typing import Optional
 
+import ash
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 
-def plot_traces(
-    samples: np.ndarray, names: list[str], file: Path | str
-) -> tuple[Figure, Axes]:
+def plot_traces(samples: np.ndarray, var_names: list[str], file: Path | str) -> tuple[Figure, Axes]:
     """Plot MCMC sample history across all iterations and variables"""
     width = 6
     height = 2
-    num_vars = len(names)
+    num_vars = len(var_names)
     fig, axes = plt.subplots(num_vars, 1, figsize=(width, num_vars * height))
     sample_indices = np.arange(samples.shape[0])
 
     for i, ax in enumerate(axes):
-        ax.set_ylabel(f"${names[i]}$")
+        ax.set_ylabel(f"{var_names[i]}")
         ax.set_xlabel("Step")
         ax.plot(sample_indices, samples[:, i], color="black")
         ax.set_xlim(0, sample_indices[-1])
@@ -90,15 +88,13 @@ def _determine_limits(x: np.ndarray) -> tuple[float, float]:
 
 def plot_corner(
     samples: np.ndarray,
-    names: list[str],
+    var_names: list[str],
     file: Path | str,
     logpdfs: Optional[np.ndarray] = None,
 ) -> tuple[Figure, Axes]:
-
-    names_latex = [f"${name}$" for name in names]
     size = 8
     fontsize = 15
-    num_vars = len(names)
+    num_vars = len(var_names)
     fig, axes = plt.subplots(num_vars, num_vars, figsize=(size, size))
 
     lims = [_determine_limits(samples[:, i]) for i in range(num_vars)]
@@ -118,12 +114,12 @@ def plot_corner(
                 _ax_hist2d(ax, samples[:, i], samples[:, j], lims[i], lims[j], logpdfs)
 
                 if i == 0:
-                    ax.set_ylabel(names_latex[j], fontsize=fontsize)
+                    ax.set_ylabel(var_names[j], fontsize=fontsize)
                 else:
                     ax.set_yticklabels([])
 
                 if j == num_vars - 1:
-                    ax.set_xlabel(names_latex[i], fontsize=fontsize)
+                    ax.set_xlabel(var_names[i], fontsize=fontsize)
                 else:
                     ax.set_xticklabels([])
 
@@ -131,20 +127,5 @@ def plot_corner(
 
     plt.tight_layout()
     fig.savefig(file, dpi=300)
+    plt.close()
     return fig, axes
-
-
-if __name__ == "__main__":
-    sample_dir = Path("scripts/pem_v0/amisc_2024-12-18T21.21.01")
-
-    data = np.genfromtxt(sample_dir / "samples.txt", delimiter=",")
-    samples = data[:, :-2]
-    unique_samples, unique_inds = np.unique(samples, axis=0, return_index=True)
-    unique_logpdfs = data[unique_inds, 2]
-
-    names = ["a_1", "a_2"]
-
-    plot_traces(samples, names, sample_dir / "traces.png")
-    plot_corner(unique_samples, names, sample_dir / "corner.png", unique_logpdfs)
-    cov = np.cov(samples.T)
-    print(cov)
