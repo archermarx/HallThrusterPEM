@@ -1,4 +1,4 @@
-Operating condition,Anode voltage (V),Anode flow rate (mg/s),Cathode flow rate (mg/s),Background pressure (Torr),Anode current (A),Axial position from anode (m),Peak ion velocity (m/s),Peak ion velocity absolute uncertainty (m/s)
+Operating condition,Anode voltage (V),Anode flow rate (mg/s),Cathode flow rate (mg/s),Background pressure (Torr),Anode current (A),Axial position from anode (m),Ion velocity (m/s),Ion velocity absolute uncertainty (m/s)
 1,300,5.16,0.396,1.70E-05,4.24,0.009,-1024.350689,500
 1,300,5.16,0.396,1.70E-05,4.24,0.013,-1090.871409,500
 1,300,5.16,0.396,1.70E-05,4.24,0.017,-1066.907048,500

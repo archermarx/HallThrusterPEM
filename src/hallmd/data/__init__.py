@@ -57,72 +57,6 @@ class ThrusterData:
         return out
 
 
-class Table:
-    _table: dict[str, Array]
-    shape: tuple[int, int]
-
-    def __init__(self, table: dict[str, Array]):
-        self._table = table
-        keys = list(table.keys())
-        num_cols = len(keys)
-        num_rows = table[keys[0]].size
-        self.shape = (num_rows, num_cols)
-
-    def __getitem__(self, key):
-        return self._table[key]
-
-    def __setitem__(self, key, value):
-        self._table[key] = value
-
-    def keys(self):
-        return self._table.keys()
-
-    def values(self):
-        return self._table.values()
-
-    def items(self):
-        return self._table.items()
-
-    @staticmethod
-    def from_file(file: PathLike, delimiter=",", comments="#") -> "Table":
-        # Read header of file to get column names
-        # We skip comments (lines starting with the string in the `comments` arg)
-        header_start = 0
-        with open(file, "r") as f:
-            for i, line in enumerate(f):
-                if not line.startswith(comments):
-                    header = line.rstrip()
-                    header_start = i
-                    break
-
-        column_names = header.split(delimiter)
-        data = np.genfromtxt(file, delimiter=delimiter, comments=comments, skip_header=header_start + 1)
-
-        table: dict[str, Array] = {column: data[:, i] for (i, column) in enumerate(column_names)}
-
-        return Table(table)
-
-    def __repr__(self) -> str:
-        return self._table.__repr__()
-
-    def __str__(self) -> str:
-        colnames = list(self._table.keys())
-        colwidths = [len(key) for key in colnames]
-        table_str = "| " + " | ".join(colnames) + " |\n"
-        table_str += "-" * len(table_str)
-        fmt_strs = [f"  {{0:{width}.4f}}|" for width in colwidths]
-
-        for row in range(self.shape[0]):
-            table_str += "|"
-
-            for col, fmt_str in enumerate(fmt_strs):
-                table_str += fmt_str.format(self[colnames[col]][row])
-
-            table_str += "\n"
-
-        return table_str
-
-
 def load(files: Sequence[PathLike] | PathLike) -> dict[OperatingCondition, ThrusterData]:
     data: dict[OperatingCondition, ThrusterData] = {}
     if isinstance(files, Sequence):
@@ -136,27 +70,28 @@ def load(files: Sequence[PathLike] | PathLike) -> dict[OperatingCondition, Thrus
 
 
 def _load_dataset(file: PathLike) -> dict[OperatingCondition, ThrusterData]:
-    table = Table.from_file(file, delimiter=",", comments="#")
+    table = _table_from_file(file, delimiter=",", comments="#")
     data: dict[OperatingCondition, ThrusterData] = {}
 
     # Compute anode mass flow rate, if not present
-    mdot_a_key = "Anode flow rate (mg/s)"
-    mdot_t_key = "Total flow rate (mg/s)"
-    flow_ratio_key = "Anode-cathode flow ratio"
+    mdot_a_key = "anode flow rate (mg/s)"
+    mdot_t_key = "total flow rate (mg/s)"
+    flow_ratio_key = "anode-cathode flow ratio"
+    keys = list(table.keys())
 
-    if mdot_a_key in table.keys():
+    if mdot_a_key in keys:
         mdot_a = table[mdot_a_key]
     else:
-        if mdot_t_key in table.keys() and flow_ratio_key in table.keys():
+        if mdot_t_key in keys and flow_ratio_key in keys:
             flow_ratio = table[flow_ratio_key]
             anode_flow_fraction = flow_ratio / (flow_ratio + 1)
             mdot_a = table[mdot_t_key] * anode_flow_fraction
 
     # Get background pressure and discharge voltage
-    P_B = np.log10(table["Background pressure (Torr)"])
-    V_a = table["Anode voltage (V)"]
+    P_B = np.log10(table["background pressure (torr)"])
+    V_a = table["anode voltage (v)"]
 
-    num_rows = table.shape[0]
+    num_rows = len(table[keys[0]])
     row_num = 0
     opcond_start_row = 0
     opcond = OperatingCondition(P_B[0], V_a[0], mdot_a[0])
@@ -175,37 +110,36 @@ def _load_dataset(file: PathLike) -> dict[OperatingCondition, ThrusterData]:
         # Fill up data
         # We assume all errors (expressed as value +/- error) correspond to two standard deviations
         for key, val in table.items():
-            lower = key.casefold()
-            if lower == "Thrust (mN)".casefold():
+            if key == "thrust (mn)":
                 # Load thrust data
                 T = val[opcond_start_row] * 1e-3  # convert to Newtons
-                T_std = table["Thrust relative uncertainty"][opcond_start_row] * T / 2
+                T_std = table["thrust relative uncertainty"][opcond_start_row] * T / 2
                 data[opcond].T = Measurement(mean=T, std=T_std)
 
-            elif lower == "Anode current (A)".casefold():
+            elif key == "anode current (a)":
                 # Load discharge current data
                 # assume a 0.1-A std deviation for discharge current
                 data[opcond].I_D = Measurement(mean=val[opcond_start_row], std=0.1)
 
-            elif lower == "Cathode coupling voltage (V)".casefold():
+            elif key == "cathode coupling voltage (v)":
                 # Load cathode coupling data
                 V_cc = val[opcond_start_row]
-                V_cc_std = table["Cathode coupling voltage absolute uncertainty (V)"][opcond_start_row] / 2
+                V_cc_std = table["cathode coupling voltage absolute uncertainty (v)"][opcond_start_row] / 2
                 data[opcond].V_cc = Measurement(mean=V_cc, std=V_cc_std)
 
-            elif lower == "Peak ion velocity (m/s)".casefold():
+            elif key == "ion velocity (m/s)":
                 # Load ion velocity data
                 uion: Array = val[opcond_start_row:row_num]
-                uion_std: Array = table["Peak ion velocity absolute uncertainty (m/s)"][opcond_start_row:row_num] / 2
+                uion_std: Array = table["ion velocity absolute uncertainty (m/s)"][opcond_start_row:row_num] / 2
                 data[opcond].uion = Measurement(mean=uion, std=uion_std)
-                data[opcond].uion_coords = table["Axial position from anode (m)"][opcond_start_row:row_num]
+                data[opcond].uion_coords = table["axial position from anode (m)"][opcond_start_row:row_num]
 
-            elif lower == "Ion current density (mA/cm^2)".casefold():
+            elif key == "ion current density (ma/cm^2)":
                 # Load ion current density data
                 jion: Array = val[opcond_start_row:row_num] * 10  # Convert to A / m^2
-                jion_std: Array = table["Ion current density relative uncertainty"][opcond_start_row:row_num] * jion / 2
-                r = table["Radial position from thruster exit (m)"][0]
-                jion_coords: Array = table["Angular position from thruster centerline (deg)"][opcond_start_row:row_num]
+                jion_std: Array = table["ion current density relative uncertainty"][opcond_start_row:row_num] * jion / 2
+                r = table["radial position from thruster exit (m)"][0]
+                jion_coords: Array = table["angular position from thruster centerline (deg)"][opcond_start_row:row_num]
 
                 # Keep only measurements at angles less than 90 degrees
                 keep_inds = jion_coords < 90
@@ -221,3 +155,21 @@ def _load_dataset(file: PathLike) -> dict[OperatingCondition, ThrusterData]:
         opcond_start_row = row_num
 
     return data
+
+
+def _table_from_file(file: PathLike, delimiter=",", comments="#") -> dict[str, Array]:
+    # Read header of file to get column names
+    # We skip comments (lines starting with the string in the `comments` arg)
+    header_start = 0
+    with open(file, "r") as f:
+        for i, line in enumerate(f):
+            if not line.startswith(comments):
+                header = line.rstrip()
+                header_start = i
+                break
+
+    column_names = header.split(delimiter)
+    data = np.genfromtxt(file, delimiter=delimiter, comments=comments, skip_header=header_start + 1)
+
+    table: dict[str, Array] = {column.casefold(): data[:, i] for (i, column) in enumerate(column_names)}
+    return table
